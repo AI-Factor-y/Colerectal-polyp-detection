@@ -1,0 +1,7 @@
+datasets/Orginal/*
+tmp/*
+src/logs/*
+outputs/*
+*/__pycache__/*
+.DS_STORE
+*.zip
