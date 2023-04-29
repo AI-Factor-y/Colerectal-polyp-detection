@@ -31,7 +31,6 @@ testMaskDir = os.path.join(
 
 frameSize = (608, 416)
 ROTATION_LIMIT = (-20, 20)
-TRANSLATION_LIMIT = (-30, 30)
 MASK_THRESHOLD = 128 # pixels >= this will be mapped to 1 and < this will be mapped to 0
 
 def rotateImage(image, angle) -> np.ndarray:
@@ -39,14 +38,6 @@ def rotateImage(image, angle) -> np.ndarray:
     rotMat = cv2.getRotationMatrix2D(image_center, angle, 1.0)
     result = cv2.warpAffine(image, rotMat, image.shape[1::-1], flags=cv2.INTER_LINEAR)
     return result
-
-
-def translateImage(image, tx, ty) -> np.ndarray:
-    translationMatrix = np.array([[1, 0, tx], [0, 1, ty]], dtype=np.float32)
-    translatedImage = cv2.warpAffine(
-        src=image, M=translationMatrix, dsize=image.shape[1::-1]
-    )
-    return translatedImage
 
 
 def augmentImageAndSave(
@@ -71,12 +62,8 @@ def augmentImageAndSave(
     for angle in range(*ROTATION_LIMIT, 1):
         if angle == 0:
             continue
-        rX = random.randint(*TRANSLATION_LIMIT)
-        rY = random.randint(*TRANSLATION_LIMIT)
-        translatedImg = translateImage(image, rX, rY)
-        translatedMask = translateImage(mask, rX, rY)
-        rotatedImg = rotateImage(translatedImg, angle)
-        rotatedMask = rotateImage(translatedMask, angle)
+        rotatedImg = rotateImage(image, angle)
+        rotatedMask = rotateImage(mask, angle)
         rotatedMask = np.where(rotatedMask >= MASK_THRESHOLD, 1, 0)
 
         saveImgPath = os.path.join(dstImgPath, f"{filename}_r{angle}.png")
