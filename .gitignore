@@ -9,3 +9,7 @@ PolypDataset_SSD/*
 PNG/*
 TIF/*
 *.csv
+SSD/__pycache__
+SSD/PolypDataset_SSD
+SSD/img
+SSD/*.tar
