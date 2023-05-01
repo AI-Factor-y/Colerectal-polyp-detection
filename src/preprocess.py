@@ -30,7 +30,7 @@ testMaskDir = os.path.join(
 )
 
 frameSize = (608, 416)
-ROTATION_LIMIT = (-20, 20)
+ROTATION_LIMIT = (0, 180)
 MASK_THRESHOLD = 128 # pixels >= this will be mapped to 1 and < this will be mapped to 0
 
 def rotateImage(image, angle) -> np.ndarray:
@@ -49,27 +49,26 @@ def augmentImageAndSave(
     mask = cv2.resize(mask, frameSize)
 
     filename = filename.split(".")[0]
-    flippedImg = cv2.flip(image, 1)
-    flippedMask = cv2.flip(mask, 1)
+    flippedImg = cv2.flip(image, 0)
+    flippedMask = cv2.flip(mask, 0)
     flippedMask = np.where(flippedMask >= MASK_THRESHOLD, 1, 0)
 
     saveImgPath = os.path.join(dstImgPath, f"{filename}_f.png")
     saveMaskPath = os.path.join(dstMaskPath, f"{filename}_f.png")
-
     cv2.imwrite(saveImgPath, flippedImg)
     cv2.imwrite(saveMaskPath, flippedMask)
 
-    for angle in range(*ROTATION_LIMIT, 1):
-        if angle == 0:
-            continue
-        rotatedImg = rotateImage(image, angle)
-        rotatedMask = rotateImage(mask, angle)
-        rotatedMask = np.where(rotatedMask >= MASK_THRESHOLD, 1, 0)
+    # for angle in range(*ROTATION_LIMIT, 1):
+    #     if angle == 0:
+    #         continue
+    #     rotatedImg = rotateImage(image, angle)
+    #     rotatedMask = rotateImage(mask, angle)
+    #     rotatedMask = np.where(rotatedMask >= MASK_THRESHOLD, 1, 0)
 
-        saveImgPath = os.path.join(dstImgPath, f"{filename}_r{angle}.png")
-        saveMaskPath = os.path.join(dstMaskPath, f"{filename}_r{angle}.png")
-        cv2.imwrite(saveImgPath, rotatedImg)
-        cv2.imwrite(saveMaskPath, rotatedMask)
+    #     saveImgPath = os.path.join(dstImgPath, f"{filename}_r{angle}.png")
+    #     saveMaskPath = os.path.join(dstMaskPath, f"{filename}_r{angle}.png")
+    #     cv2.imwrite(saveImgPath, rotatedImg)
+    #     cv2.imwrite(saveMaskPath, rotatedMask)
 
 
 def saveTestDataset(filenames: list[str]) -> None:
