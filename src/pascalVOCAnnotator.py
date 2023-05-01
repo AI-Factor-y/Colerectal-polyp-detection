@@ -1,12 +1,15 @@
 import os
+import glob
+import shutil
 import cv2
 import numpy as np
 
 THRESHOLD = 128
 
 dir = os.path.join(
-    os.path.abspath(os.path.join(os.getcwd(), os.pardir)), "datasets", "Orginal"
+    os.path.abspath(os.path.join(os.getcwd(), os.pardir)), "PNG"
 )
+
 
 def saveAnnotation(coords: tuple, filename: str, saveDir: os.path, width: int = 608, height: int = 416) -> None:
     (xMin, xMax, yMin, yMax) = coords
@@ -26,7 +29,7 @@ def saveAnnotation(coords: tuple, filename: str, saveDir: os.path, width: int = 
         </size>
         <segmented>0</segmented>
         <object>
-            <name>21</name>
+            <name>polyp</name>
             <pose>Frontal</pose>
             <truncated>0</truncated>
             <difficult>0</difficult>
@@ -41,23 +44,72 @@ def saveAnnotation(coords: tuple, filename: str, saveDir: os.path, width: int = 
     </annotation>
     '''
 
-    saveFilename = filename.split('.')[0] + '.yaml'
+    saveFilename = filename.split('.')[0] + '.xml'
     with open(os.path.join(saveDir, saveFilename), "w") as file:
         file.write(annotation)
 
+def countImagesinDir(src : str) -> int:
+    count = 0
+    for filename in os.listdir(src):
+        if not (filename.endswith(".png") or filename.endswith(".jpg")):
+            continue
+        count +=1
+
+    return count
+
+def trainTestSplitInfo(srcImgPath: str, trainSplitPercent: int, saveDir: os.path) -> None:
+
+    testLabelFile = "test.txt"
+    trainLabelFile = "trainval.txt"
+
+    # calculate the train test split size
+    totalImages = countImagesinDir(srcImgPath)
+    trainDataSize = int((trainSplitPercent/100) * totalImages)
+
+    print(f'total {totalImages} images found \n \
+          training images count : {trainDataSize} \n \
+          test images count : {totalImages - trainDataSize} ')
+
+    with open(os.path.join(saveDir, testLabelFile), "a") as testFile, \
+        open(os.path.join(saveDir, trainLabelFile), "a") as trainFile:
+        
+        for idx,filename in enumerate(os.listdir(srcImgPath)):
+            if not (filename.endswith(".png") or filename.endswith(".jpg")):
+                continue
+
+            if idx < trainDataSize:
+                trainFile.write(filename.split(".")[0] + '\n')
+            else:
+                testFile.write(filename.split('.')[0] + '\n')
+        
+
+def copyImagesToDataset(srcImgPath: str, imageSaveDir: str) -> None:
+    for jpgfile in glob.iglob(os.path.join(srcImgPath, "*.png")):
+        shutil.copy(jpgfile, imageSaveDir)
 
 def main() -> None:
-    srcImgPath = os.path.join(dir, "imgs")
-    srcMaskPath = os.path.join(dir, "masks")
+    srcImgPath = os.path.join(dir, "Original")
+    srcMaskPath = os.path.join(dir, "Ground_Truth")
     
     saveBaseDir = os.path.join(
         os.path.abspath(os.path.join(os.getcwd(), os.pardir)),
-        "tmp",
-        "training",
+        "PolypDataset_SSD",
     )
 
-    saveDir = os.path.join(saveBaseDir,  "pascalVOCAnnotations")
-    os.makedirs(saveDir, exist_ok=True)
+    annotationsSaveDir = os.path.join(saveBaseDir,  "Annotations")
+    os.makedirs(annotationsSaveDir, exist_ok=True)
+
+    # directory for saving train test split info
+    splitInfoSaveDir = os.path.join(saveBaseDir,  "ImageSets/Main")
+    os.makedirs(splitInfoSaveDir, exist_ok=True)
+
+    # directory for storing images
+    imageSaveDir = os.path.join(saveBaseDir, "PngImages")
+    os.makedirs(imageSaveDir, exist_ok=True)
+    copyImagesToDataset(srcImgPath, imageSaveDir)
+    
+    # create the train test split info text file
+    trainTestSplitInfo(srcImgPath, 80, splitInfoSaveDir)
 
     for filename in os.listdir(srcImgPath):
         if not (filename.endswith(".png") or filename.endswith(".jpg")):
@@ -73,7 +125,7 @@ def main() -> None:
         yMin = min(possibleYs)
         yMax = max(possibleYs)
 
-        saveAnnotation((xMin, xMax, yMin, yMax), filename, saveDir)
+        saveAnnotation((xMin, xMax, yMin, yMax), filename, annotationsSaveDir)
 
 if __name__ == "__main__":
     main()

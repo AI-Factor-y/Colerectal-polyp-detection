@@ -7,3 +7,5 @@ outputs/*
 *.zip
 PolypDataset_SSD/*
 PNG/*
+TIF/*
+*.csv
