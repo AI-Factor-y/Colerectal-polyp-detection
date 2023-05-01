@@ -1,12 +1,24 @@
 import os
-from keras_segmentation.models.unet import vgg_unet
+from keras_segmentation.models.unet import vgg_unet, unet, resnet50_unet
+from keras_segmentation.models.segnet import segnet
+from tensorflow.keras.callbacks import TensorBoard, ModelCheckpoint
 
-model = vgg_unet(n_classes=2 ,  input_height=416, input_width=608)
+model = unet(n_classes=2 ,  input_height=416, input_width=608)
+
+tensorBoard = TensorBoard(log_dir=f"logs/unet")
+callbacks = [
+    ModelCheckpoint(
+                filepath="checkpoints/" + model.name + ".{epoch:05d}",
+                save_weights_only=True,
+                verbose=True
+            ),
+    tensorBoard
+]
 
 model.train(
     train_images =  "../tmp/training/images_prepped_train/",
     train_annotations = "../tmp/training/annotations_prepped_train/",
-    checkpoints_path = "../tmp/vgg_unet_1" , epochs=1
+    checkpoints_path = "../tmp/unet" , epochs=2,
 )
 
 testImgDir = os.path.join(
@@ -31,8 +43,5 @@ for filename in os.listdir(testImgDir):
     except Exception as e:
         print(e)
 
-    # import matplotlib.pyplot as plt
-    # plt.imshow(out)
-
-    # evaluating the model 
+    # evaluating the model
     print(model.evaluate_segmentation( inp_images_dir="../tmp/training/images_prepped_test/"  , annotations_dir="../tmp/training/annotations_prepped_test/" ) )
