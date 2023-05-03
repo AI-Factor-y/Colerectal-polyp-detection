@@ -7,6 +7,7 @@ import sys
 from PIL import Image
 from tqdm import tqdm
 import argparse
+import csv
 
 THRESHOLD = 128
 
@@ -127,6 +128,8 @@ def convertAllImagesToPng(src):
             continue
         convertJpgToPng(os.path.join(src,filename))
 
+
+
 def rowBoundValue(imgMask):
     imageWidth= imgMask.shape[1]
 
@@ -144,6 +147,28 @@ def rowBoundValue(imgMask):
     return minX, maxX
 
 
+
+def makeAnnotationsfromCSV(csvFileDir : str, srcImgPath : str, annotationsSaveDir) -> None:
+
+    for filename in tqdm(os.listdir(csvFileDir)):
+        if not filename.endswith(".csv"):
+            continue
+        
+        imageOrig = cv2.imread(os.path.join(srcImgPath, filename.split(".")[0]+".png"))
+        imageHeight, imageWidth, _ = imageOrig.shape
+        
+        csvfilePath = os.path.join(csvFileDir, filename) 
+        with open(csvfilePath, newline='') as csvfile:
+            reader = csv.DictReader(csvfile)
+            for row in reader:
+                xMin = row['xmin']
+                yMin = row['ymin']
+                xMax = row['xmax']
+                yMax = row['ymax']
+                # print(filename, xMin, yMin, xMax, yMax)
+                saveAnnotation((xMin, xMax, yMin, yMax), filename, annotationsSaveDir, imageWidth, imageHeight)
+
+
 def main() -> None:
 
     # Create a new ArgumentParser object
@@ -152,6 +177,8 @@ def main() -> None:
     parser.add_argument("--convert", action="store_const", const=True, default=False, help="convert jpg to png")
     parser.add_argument("-original", type=str, required=True, help="relative path of original image directory")
     parser.add_argument("-mask", type=str, required=True, help="relative path of mask image directory")
+    parser.add_argument("-csv", type=str, help="relative path of bounding box csv", default="")
+ 
     # Parse the command line arguments
     args = parser.parse_args()
 
@@ -161,6 +188,7 @@ def main() -> None:
     print("image path  : ", srcImgPath)
     print("mask path  : ", srcMaskPath)
     isImageJpg = args.convert
+    csvFileSrc = args.csv
     print("convert to png : ", isImageJpg)
 
     # if the images are not in png convert them to png first
@@ -192,22 +220,28 @@ def main() -> None:
     # create the train test split info text file
     trainTestSplitInfo(srcImgPath, 90, splitInfoSaveDir)
 
-    print("creating annotations xml files...")
-    for filename in tqdm(os.listdir(srcImgPath)):
-        if not (filename.endswith(".png") or filename.endswith(".jpg")):
-            continue
-        
-        imageOrig = cv2.imread(os.path.join(srcImgPath, filename))
-        imageHeight, imageWidth, _ = imageOrig.shape
+    if csvFileSrc!= "":
+        csvFileSrc = setDatasetPath(csvFileSrc)
+        print("creating annotations xml files from csv data...")
+        makeAnnotationsfromCSV(csvFileSrc, srcImgPath, annotationsSaveDir)
 
-        mask = cv2.imread(os.path.join(srcMaskPath, filename))
-        xMin, xMax = rowBoundValue(mask)
-        
-        mask = np.transpose(mask, (1,0,2))
-        yMin, yMax = rowBoundValue(mask)
-        
-        # print("bounds for ",filename," : ",xMin, xMax, yMin, yMax)
-        saveAnnotation((xMin, xMax, yMin, yMax), filename, annotationsSaveDir, imageWidth, imageHeight)
+    else:
+        print("creating annotations xml files from masks...")
+        for filename in tqdm(os.listdir(srcImgPath)):
+            if not (filename.endswith(".png") or filename.endswith(".jpg")):
+                continue
+            
+            imageOrig = cv2.imread(os.path.join(srcImgPath, filename))
+            imageHeight, imageWidth, _ = imageOrig.shape
+
+            mask = cv2.imread(os.path.join(srcMaskPath, filename))
+            xMin, xMax = rowBoundValue(mask)
+            
+            mask = np.transpose(mask, (1,0,2))
+            yMin, yMax = rowBoundValue(mask)
+            
+            # print("bounds for ",filename," : ",xMin, xMax, yMin, yMax)
+            saveAnnotation((xMin, xMax, yMin, yMax), filename, annotationsSaveDir, imageWidth, imageHeight)
 
 if __name__ == "__main__":
     main()
