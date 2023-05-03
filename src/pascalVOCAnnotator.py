@@ -6,6 +6,7 @@ import numpy as np
 import sys
 from PIL import Image
 from tqdm import tqdm
+import argparse
 
 THRESHOLD = 128
 
@@ -126,22 +127,41 @@ def convertAllImagesToPng(src):
             continue
         convertJpgToPng(os.path.join(src,filename))
 
+def rowBoundValue(imgMask):
+    imageWidth= imgMask.shape[1]
+
+    grey_values = np.mean(imgMask, axis=2)
+    mask = (grey_values > THRESHOLD) & (imgMask[:, :, 0] != 0) & (imgMask[:, :, 0] != imageWidth)
+
+    nonzero_indices = np.nonzero(mask)
+    if nonzero_indices[0].size == 0:
+        return -1, -1
+
+    
+    minX = np.min(nonzero_indices[1])
+    maxX = np.max(nonzero_indices[1])
+
+    return minX, maxX
+
 
 def main() -> None:
 
-    if len(sys.argv[1:]) != 3:
-        print("Invalid argument or wrong format")
-        print("arg1 : relative path to original image")
-        print("arg2 : relative path to ground truth (mask)")
-        print("arg3 : (bool) Convert image from jpg to png (true or false)")
-        exit(0)
+    # Create a new ArgumentParser object
+    parser = argparse.ArgumentParser()
+    # Add the boolean argument
+    parser.add_argument("--convert", action="store_const", const=True, default=False, help="convert jpg to png")
+    parser.add_argument("-original", type=str, required=True, help="relative path of original image directory")
+    parser.add_argument("-mask", type=str, required=True, help="relative path of mask image directory")
+    # Parse the command line arguments
+    args = parser.parse_args()
 
-    srcImgPath = setDatasetPath(sys.argv[1])
-    srcMaskPath = setDatasetPath(sys.argv[2])
+    srcImgPath = setDatasetPath(args.original)
+    srcMaskPath = setDatasetPath(args.mask)
 
     print("image path  : ", srcImgPath)
     print("mask path  : ", srcMaskPath)
-    isImageJpg = bool(sys.argv[3])
+    isImageJpg = args.convert
+    print("convert to png : ", isImageJpg)
 
     # if the images are not in png convert them to png first
     if isImageJpg:
@@ -170,25 +190,24 @@ def main() -> None:
     copyImagesToDataset(srcImgPath, imageSaveDir)
     
     # create the train test split info text file
-    trainTestSplitInfo(srcImgPath, 80, splitInfoSaveDir)
+    trainTestSplitInfo(srcImgPath, 90, splitInfoSaveDir)
 
     print("creating annotations xml files...")
     for filename in tqdm(os.listdir(srcImgPath)):
         if not (filename.endswith(".png") or filename.endswith(".jpg")):
             continue
         
+        imageOrig = cv2.imread(os.path.join(srcImgPath, filename))
+        imageHeight, imageWidth, _ = imageOrig.shape
+
         mask = cv2.imread(os.path.join(srcMaskPath, filename))
-        possibleXs = [np.argmax(x > THRESHOLD) for x in mask]
-        xMin = min(possibleXs)
-        xMax = max(possibleXs)
-
-        mask.transpose()
-        possibleYs = [np.argmax(y > THRESHOLD) for y in mask]
-        yMin = min(possibleYs)
-        yMax = max(possibleYs)
-
-        saveAnnotation((xMin, xMax, yMin, yMax), filename, annotationsSaveDir)
-
+        xMin, xMax = rowBoundValue(mask)
+        
+        mask = np.transpose(mask, (1,0,2))
+        yMin, yMax = rowBoundValue(mask)
+        
+        # print("bounds for ",filename," : ",xMin, xMax, yMin, yMax)
+        saveAnnotation((xMin, xMax, yMin, yMax), filename, annotationsSaveDir, imageWidth, imageHeight)
 
 if __name__ == "__main__":
     main()
