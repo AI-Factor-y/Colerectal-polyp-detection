@@ -46,7 +46,9 @@ class VGGBase(nn.Module):
         self.conv7 = nn.Conv2d(1024, 1024, kernel_size=1)
 
         # Load pretrained layers
-        self.load_pretrained_layers()
+        # self.load_pretrained_layers()
+        print("the base model has been skipped starting from scratch..")
+
 
     def forward(self, image):
         """

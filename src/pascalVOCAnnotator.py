@@ -3,13 +3,22 @@ import glob
 import shutil
 import cv2
 import numpy as np
+import sys
+from PIL import Image
+from tqdm import tqdm
 
 THRESHOLD = 128
 
-dir = os.path.join(
-    os.path.abspath(os.path.join(os.getcwd(), os.pardir)), "PNG"
-)
+# dir = os.path.join(
+#     os.path.abspath(os.path.join(os.getcwd(), os.pardir)), "PNG"
+# )
 
+def setDatasetPath(relativeDirPath) -> str:
+    dir = os.path.join(
+        os.path.abspath(os.getcwd()), relativeDirPath
+    )
+
+    return dir
 
 def saveAnnotation(coords: tuple, filename: str, saveDir: os.path, width: int = 608, height: int = 416) -> None:
     (xMin, xMax, yMin, yMax) = coords
@@ -70,10 +79,11 @@ def trainTestSplitInfo(srcImgPath: str, trainSplitPercent: int, saveDir: os.path
           training images count : {trainDataSize} \n \
           test images count : {totalImages - trainDataSize} ')
 
+    print("writing test and train split info text files..")
     with open(os.path.join(saveDir, testLabelFile), "a") as testFile, \
         open(os.path.join(saveDir, trainLabelFile), "a") as trainFile:
         
-        for idx,filename in enumerate(os.listdir(srcImgPath)):
+        for idx,filename in tqdm(enumerate(os.listdir(srcImgPath))):
             if not (filename.endswith(".png") or filename.endswith(".jpg")):
                 continue
 
@@ -87,10 +97,61 @@ def copyImagesToDataset(srcImgPath: str, imageSaveDir: str) -> None:
     for jpgfile in glob.iglob(os.path.join(srcImgPath, "*.png")):
         shutil.copy(jpgfile, imageSaveDir)
 
+
+
+def convertJpgToPng(jpg_file_path : str) -> None:
+    with Image.open(jpg_file_path) as im:
+        # Convert the image to RGB mode (if necessary)
+        if im.mode != "RGB":
+            im = im.convert("RGB")
+        
+        # Get the file name and extension
+        file_name, file_ext = os.path.splitext(jpg_file_path)
+        
+        # Get the parent directory of the JPG file
+        parent_dir = os.path.dirname(jpg_file_path)
+        
+        # Create the "PNG" folder if it doesn't exist
+        png_folder = os.path.join(parent_dir, "PNG")
+        os.makedirs(png_folder, exist_ok=True)
+        
+        # Save the image as a PNG file in the "PNG" folder
+        png_file_path = os.path.join(png_folder, os.path.basename(file_name) + ".png")
+
+        im.save(png_file_path, "PNG")
+
+def convertAllImagesToPng(src):
+    for filename in tqdm(os.listdir(src)):
+        if not (filename.endswith(".jpg")):
+            continue
+        convertJpgToPng(os.path.join(src,filename))
+
+
 def main() -> None:
-    srcImgPath = os.path.join(dir, "Original")
-    srcMaskPath = os.path.join(dir, "Ground_Truth")
-    
+
+    if len(sys.argv[1:]) != 3:
+        print("Invalid argument or wrong format")
+        print("arg1 : relative path to original image")
+        print("arg2 : relative path to ground truth (mask)")
+        print("arg3 : (bool) Convert image from jpg to png (true or false)")
+        exit(0)
+
+    srcImgPath = setDatasetPath(sys.argv[1])
+    srcMaskPath = setDatasetPath(sys.argv[2])
+
+    print("image path  : ", srcImgPath)
+    print("mask path  : ", srcMaskPath)
+    isImageJpg = bool(sys.argv[3])
+
+    # if the images are not in png convert them to png first
+    if isImageJpg:
+        print("converting original images to png")
+        convertAllImagesToPng(srcImgPath)
+        srcImgPath = srcImgPath+ "/PNG"
+        print("converting masks to png")
+        convertAllImagesToPng(srcMaskPath)
+        srcMaskPath = srcMaskPath + "/PNG"
+
     saveBaseDir = os.path.join(
         os.path.abspath(os.path.join(os.getcwd(), os.pardir)),
         "PolypDataset_SSD",
@@ -111,7 +172,8 @@ def main() -> None:
     # create the train test split info text file
     trainTestSplitInfo(srcImgPath, 80, splitInfoSaveDir)
 
-    for filename in os.listdir(srcImgPath):
+    print("creating annotations xml files...")
+    for filename in tqdm(os.listdir(srcImgPath)):
         if not (filename.endswith(".png") or filename.endswith(".jpg")):
             continue
         
@@ -126,6 +188,7 @@ def main() -> None:
         yMax = max(possibleYs)
 
         saveAnnotation((xMin, xMax, yMin, yMax), filename, annotationsSaveDir)
+
 
 if __name__ == "__main__":
     main()

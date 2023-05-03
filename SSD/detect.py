@@ -99,4 +99,4 @@ if __name__ == '__main__':
     img_path = 'PolypDataset_SSD/PngImages/1.png'
     original_image = Image.open(img_path, mode='r')
     original_image = original_image.convert('RGB')
-    detect(original_image, min_score=0.2, max_overlap=0.5, top_k=200).show()
+    detect(original_image, min_score=0.2, max_overlap=0.5, top_k=2).show()
