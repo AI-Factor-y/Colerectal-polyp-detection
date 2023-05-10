@@ -3,13 +3,24 @@ import glob
 import shutil
 import cv2
 import numpy as np
+import sys
+from PIL import Image
+from tqdm import tqdm
+import argparse
+import csv
 
 THRESHOLD = 128
 
-dir = os.path.join(
-    os.path.abspath(os.path.join(os.getcwd(), os.pardir)), "PNG"
-)
+# dir = os.path.join(
+#     os.path.abspath(os.path.join(os.getcwd(), os.pardir)), "PNG"
+# )
 
+def setDatasetPath(relativeDirPath) -> str:
+    dir = os.path.join(
+        os.path.abspath(os.getcwd()), relativeDirPath
+    )
+
+    return dir
 
 def saveAnnotation(coords: tuple, filename: str, saveDir: os.path, width: int = 608, height: int = 416) -> None:
     (xMin, xMax, yMin, yMax) = coords
@@ -70,10 +81,11 @@ def trainTestSplitInfo(srcImgPath: str, trainSplitPercent: int, saveDir: os.path
           training images count : {trainDataSize} \n \
           test images count : {totalImages - trainDataSize} ')
 
+    print("writing test and train split info text files..")
     with open(os.path.join(saveDir, testLabelFile), "a") as testFile, \
         open(os.path.join(saveDir, trainLabelFile), "a") as trainFile:
         
-        for idx,filename in enumerate(os.listdir(srcImgPath)):
+        for idx,filename in tqdm(enumerate(os.listdir(srcImgPath))):
             if not (filename.endswith(".png") or filename.endswith(".jpg")):
                 continue
 
@@ -87,10 +99,107 @@ def copyImagesToDataset(srcImgPath: str, imageSaveDir: str) -> None:
     for jpgfile in glob.iglob(os.path.join(srcImgPath, "*.png")):
         shutil.copy(jpgfile, imageSaveDir)
 
-def main() -> None:
-    srcImgPath = os.path.join(dir, "Original")
-    srcMaskPath = os.path.join(dir, "Ground_Truth")
+
+
+def convertJpgToPng(jpg_file_path : str) -> None:
+    with Image.open(jpg_file_path) as im:
+        # Convert the image to RGB mode (if necessary)
+        if im.mode != "RGB":
+            im = im.convert("RGB")
+        
+        # Get the file name and extension
+        file_name, file_ext = os.path.splitext(jpg_file_path)
+        
+        # Get the parent directory of the JPG file
+        parent_dir = os.path.dirname(jpg_file_path)
+        
+        # Create the "PNG" folder if it doesn't exist
+        png_folder = os.path.join(parent_dir, "PNG")
+        os.makedirs(png_folder, exist_ok=True)
+        
+        # Save the image as a PNG file in the "PNG" folder
+        png_file_path = os.path.join(png_folder, os.path.basename(file_name) + ".png")
+
+        im.save(png_file_path, "PNG")
+
+def convertAllImagesToPng(src):
+    for filename in tqdm(os.listdir(src)):
+        if not (filename.endswith(".jpg")):
+            continue
+        convertJpgToPng(os.path.join(src,filename))
+
+
+
+def rowBoundValue(imgMask):
+    imageWidth= imgMask.shape[1]
+
+    grey_values = np.mean(imgMask, axis=2)
+    mask = (grey_values > THRESHOLD) & (imgMask[:, :, 0] != 0) & (imgMask[:, :, 0] != imageWidth)
+
+    nonzero_indices = np.nonzero(mask)
+    if nonzero_indices[0].size == 0:
+        return -1, -1
+
     
+    minX = np.min(nonzero_indices[1])
+    maxX = np.max(nonzero_indices[1])
+
+    return minX, maxX
+
+
+
+def makeAnnotationsfromCSV(csvFileDir : str, srcImgPath : str, annotationsSaveDir) -> None:
+
+    for filename in tqdm(os.listdir(csvFileDir)):
+        if not filename.endswith(".csv"):
+            continue
+        
+        imageOrig = cv2.imread(os.path.join(srcImgPath, filename.split(".")[0]+".png"))
+        imageHeight, imageWidth, _ = imageOrig.shape
+        
+        csvfilePath = os.path.join(csvFileDir, filename) 
+        with open(csvfilePath, newline='') as csvfile:
+            reader = csv.DictReader(csvfile)
+            for row in reader:
+                xMin = row['xmin']
+                yMin = row['ymin']
+                xMax = row['xmax']
+                yMax = row['ymax']
+                # print(filename, xMin, yMin, xMax, yMax)
+                saveAnnotation((xMin, xMax, yMin, yMax), filename, annotationsSaveDir, imageWidth, imageHeight)
+
+
+def main() -> None:
+
+    # Create a new ArgumentParser object
+    parser = argparse.ArgumentParser()
+    # Add the boolean argument
+    parser.add_argument("--convert", action="store_const", const=True, default=False, help="convert jpg to png")
+    parser.add_argument("-original", type=str, required=True, help="relative path of original image directory")
+    parser.add_argument("-mask", type=str, required=True, help="relative path of mask image directory")
+    parser.add_argument("-csv", type=str, help="relative path of bounding box csv", default="")
+ 
+    # Parse the command line arguments
+    args = parser.parse_args()
+
+    srcImgPath = setDatasetPath(args.original)
+    srcMaskPath = setDatasetPath(args.mask)
+
+    print("image path  : ", srcImgPath)
+    print("mask path  : ", srcMaskPath)
+    isImageJpg = args.convert
+    csvFileSrc = args.csv
+    print("convert to png : ", isImageJpg)
+
+    # if the images are not in png convert them to png first
+    if isImageJpg:
+        print("converting original images to png")
+        convertAllImagesToPng(srcImgPath)
+        srcImgPath = srcImgPath+ "/PNG"
+        print("converting masks to png")
+        convertAllImagesToPng(srcMaskPath)
+        srcMaskPath = srcMaskPath + "/PNG"
+
     saveBaseDir = os.path.join(
         os.path.abspath(os.path.join(os.getcwd(), os.pardir)),
         "PolypDataset_SSD",
@@ -109,23 +218,30 @@ def main() -> None:
     copyImagesToDataset(srcImgPath, imageSaveDir)
     
     # create the train test split info text file
-    trainTestSplitInfo(srcImgPath, 80, splitInfoSaveDir)
+    trainTestSplitInfo(srcImgPath, 90, splitInfoSaveDir)
 
-    for filename in os.listdir(srcImgPath):
-        if not (filename.endswith(".png") or filename.endswith(".jpg")):
-            continue
-        
-        mask = cv2.imread(os.path.join(srcMaskPath, filename))
-        possibleXs = [np.argmax(x > THRESHOLD) for x in mask]
-        xMin = min(possibleXs)
-        xMax = max(possibleXs)
+    if csvFileSrc!= "":
+        csvFileSrc = setDatasetPath(csvFileSrc)
+        print("creating annotations xml files from csv data...")
+        makeAnnotationsfromCSV(csvFileSrc, srcImgPath, annotationsSaveDir)
 
-        mask.transpose()
-        possibleYs = [np.argmax(y > THRESHOLD) for y in mask]
-        yMin = min(possibleYs)
-        yMax = max(possibleYs)
+    else:
+        print("creating annotations xml files from masks...")
+        for filename in tqdm(os.listdir(srcImgPath)):
+            if not (filename.endswith(".png") or filename.endswith(".jpg")):
+                continue
+            
+            imageOrig = cv2.imread(os.path.join(srcImgPath, filename))
+            imageHeight, imageWidth, _ = imageOrig.shape
 
-        saveAnnotation((xMin, xMax, yMin, yMax), filename, annotationsSaveDir)
+            mask = cv2.imread(os.path.join(srcMaskPath, filename))
+            xMin, xMax = rowBoundValue(mask)
+            
+            mask = np.transpose(mask, (1,0,2))
+            yMin, yMax = rowBoundValue(mask)
+            
+            # print("bounds for ",filename," : ",xMin, xMax, yMin, yMax)
+            saveAnnotation((xMin, xMax, yMin, yMax), filename, annotationsSaveDir, imageWidth, imageHeight)
 
 if __name__ == "__main__":
     main()
