@@ -1,7 +1,17 @@
+<<<<<<< HEAD
 datasets/*
 tmp/*
 src/logs/*
 outputs/*
+=======
+UNET/datasets/*
+UNET/tmp/*
+UNET/src/*.txt
+UNET/src/logs/*
+UNET/src/checkpoints/*
+UNET/output/
+UNET/src/__pycache__/*
+>>>>>>> 9aeb2cb (Code Clean up)
 */__pycache__/*
 .DS_STORE
 *.zip
