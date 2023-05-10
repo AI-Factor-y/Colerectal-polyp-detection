@@ -1,6 +1,5 @@
 import os
 import cv2
-import shutil
 import random
 import numpy as np
 from tqdm import tqdm
@@ -29,8 +28,8 @@ testMaskDir = os.path.join(
     "annotations_prepped_test",
 )
 
-frameSize = (608, 416)
-ROTATION_LIMIT = (0, 180)
+frameSize = (256, 256)
+ROTATION_LIMIT = (0, 180, 5) # (start, end, increment)
 MASK_THRESHOLD = 128 # pixels >= this will be mapped to 1 and < this will be mapped to 0
 
 def rotateImage(image, angle) -> np.ndarray:
@@ -39,6 +38,13 @@ def rotateImage(image, angle) -> np.ndarray:
     result = cv2.warpAffine(image, rotMat, image.shape[1::-1], flags=cv2.INTER_LINEAR)
     return result
 
+
+def translateImage(image, tx, ty):
+    translationMatrix = np.array([[1, 0, tx], [0, 1, ty]], dtype=np.float32)
+    translatedImage = cv2.warpAffine(
+        src=image, M=translationMatrix, dsize=image.shape[1::-1]
+    )
+    return translatedImage
 
 def augmentImageAndSave(
     filename: str, srcImgPath: str, srcMaskPath: str, dstImgPath: str, dstMaskPath
@@ -58,17 +64,22 @@ def augmentImageAndSave(
     cv2.imwrite(saveImgPath, flippedImg)
     cv2.imwrite(saveMaskPath, flippedMask)
 
-    # for angle in range(*ROTATION_LIMIT, 1):
-    #     if angle == 0:
-    #         continue
-    #     rotatedImg = rotateImage(image, angle)
-    #     rotatedMask = rotateImage(mask, angle)
-    #     rotatedMask = np.where(rotatedMask >= MASK_THRESHOLD, 1, 0)
+    # saveImgPath = os.path.join(dstImgPath, f"{filename}.png")
+    # saveMaskPath = os.path.join(dstMaskPath, f"{filename}.png")
+    # cv2.imwrite(saveImgPath, image)
+    # mask = np.where(mask >= MASK_THRESHOLD, 1, 0)
+    # cv2.imwrite(saveMaskPath, mask)
 
-    #     saveImgPath = os.path.join(dstImgPath, f"{filename}_r{angle}.png")
-    #     saveMaskPath = os.path.join(dstMaskPath, f"{filename}_r{angle}.png")
-    #     cv2.imwrite(saveImgPath, rotatedImg)
-    #     cv2.imwrite(saveMaskPath, rotatedMask)
+    for angle in range(*ROTATION_LIMIT):
+        translatedImg = translateImage(image,  random.randint(-30, 30), random.randint(-30, 30))
+        rotatedImg = rotateImage(translatedImg, angle)
+        rotatedMask = rotateImage(mask, angle)
+        rotatedMask = np.where(rotatedMask >= MASK_THRESHOLD, 1, 0)
+
+        saveImgPath = os.path.join(dstImgPath, f"{filename}_r{angle}.png")
+        saveMaskPath = os.path.join(dstMaskPath, f"{filename}_r{angle}.png")
+        cv2.imwrite(saveImgPath, rotatedImg)
+        cv2.imwrite(saveMaskPath, rotatedMask)
 
 
 def saveTestDataset(filenames: list[str]) -> None:
@@ -76,10 +87,13 @@ def saveTestDataset(filenames: list[str]) -> None:
     maskPath = os.path.join(dir, "masks")
 
     for filename in filenames:
-        shutil.copy(os.path.join(imgPath, filename), testImgDir)
-        shutil.copy(
-            os.path.join(maskPath, filename), testMaskDir
-        )
+        image = cv2.imread(os.path.join(imgPath, filename))
+        image = cv2.resize(image, frameSize)
+        cv2.imwrite(os.path.join(testImgDir, filename), image)
+        mask = cv2.imread(os.path.join(maskPath, filename))
+        mask = cv2.resize(mask, frameSize)
+        mask = np.where(mask >= MASK_THRESHOLD, 1, 0)
+        cv2.imwrite(os.path.join(testMaskDir, filename), mask)
 
 
 def main():
@@ -104,12 +118,12 @@ def main():
         imgs.append(filename)
 
     random.shuffle(imgs)
-    testLen = round(len(imgs) * 0.2)
+    testLen = round(len(imgs) * 0.1)
     test = imgs[:testLen]
     train = imgs[testLen:]
 
     saveTestDataset(filenames=test)
-
+    
     for filename in tqdm(train):
         try:
             augmentImageAndSave(
